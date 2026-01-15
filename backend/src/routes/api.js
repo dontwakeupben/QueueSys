@@ -224,9 +224,10 @@ router.post('/agent/decline', async (req, res) => {
 router.post('/walkin/new', async (req, res) => {
     try {
         const showFlatId = req.body.showFlatId || DEFAULT_SHOWFLAT_ID;
+        const customerName = req.body.customerName || 'Guest';
         const io = req.app.get('io');
 
-        const result = await allocationService.allocateAgent(showFlatId, io);
+        const result = await allocationService.allocateAgent(showFlatId, customerName, io);
 
         if (!result.success) {
             return res.status(404).json({
@@ -236,10 +237,12 @@ router.post('/walkin/new', async (req, res) => {
             });
         }
 
-        // Emit AGENT_CALLED to the specific agent
+        // Emit AGENT_CALLED to the specific agent with customer info
         if (result.agent.socketId && io) {
             io.to(result.agent.socketId).emit('AGENT_CALLED', {
                 walkInId: result.walkIn.id,
+                customerName: result.walkIn.customerName,
+                queueNumber: result.walkIn.queueNumber,
                 timeoutSeconds: result.timeoutSeconds,
             });
         }
@@ -248,6 +251,10 @@ router.post('/walkin/new', async (req, res) => {
         if (io) {
             const dashboardState = await dashboardService.getDashboardState(showFlatId);
             io.emit('QUEUE_UPDATED', dashboardState);
+
+            // Update public display to show the customer being called
+            const publicData = await dashboardService.getPublicDisplayData(showFlatId);
+            io.emit('PUBLIC_DISPLAY_UPDATED', publicData);
         }
 
         // Start timeout timer
@@ -377,6 +384,10 @@ async function handleTimeout(walkInId, callAttemptId, agentId, io) {
 
                 const dashboardState = await dashboardService.getDashboardState(DEFAULT_SHOWFLAT_ID);
                 io.emit('QUEUE_UPDATED', dashboardState);
+
+                // Update public display
+                const publicData = await dashboardService.getPublicDisplayData(DEFAULT_SHOWFLAT_ID);
+                io.emit('PUBLIC_DISPLAY_UPDATED', publicData);
             }
         }
     } catch (error) {
@@ -384,4 +395,83 @@ async function handleTimeout(walkInId, callAttemptId, agentId, io) {
     }
 }
 
+/**
+ * POST /api/walkin/no-show
+ * Mark a walk-in as no-show (customer didn't show up after being assigned)
+ */
+router.post('/walkin/no-show', async (req, res) => {
+    try {
+        const { walkInId, agentId } = req.body;
+        const prisma = require('../prisma');
+
+        if (!walkInId) {
+            return res.status(400).json({ error: 'walkInId is required' });
+        }
+
+        // Update walk-in status to NO_SHOW
+        const walkIn = await prisma.walkIn.update({
+            where: { id: walkInId },
+            data: { status: 'NO_SHOW' },
+        });
+
+        // If agent provided, put them back in the queue
+        if (agentId) {
+            await agentService.joinQueue(agentId, null);
+        }
+
+        // Emit updates
+        const io = req.app.get('io');
+        if (io) {
+            const dashboardState = await dashboardService.getDashboardState(DEFAULT_SHOWFLAT_ID);
+            io.emit('QUEUE_UPDATED', dashboardState);
+
+            const publicData = await dashboardService.getPublicDisplayData(DEFAULT_SHOWFLAT_ID);
+            io.emit('PUBLIC_DISPLAY_UPDATED', publicData);
+        }
+
+        res.json({
+            success: true,
+            walkIn: walkIn,
+            message: 'Walk-in marked as no-show',
+        });
+    } catch (error) {
+        console.error('Error in /walkin/no-show:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * POST /api/agent/complete
+ * Agent completes serving a customer (goes back online)
+ */
+router.post('/agent/complete', async (req, res) => {
+    try {
+        const { agentId, socketId } = req.body;
+
+        if (!agentId) {
+            return res.status(400).json({ error: 'agentId is required' });
+        }
+
+        // Put agent back in queue
+        const result = await agentService.joinQueue(agentId, socketId || null);
+
+        // Emit updates
+        const io = req.app.get('io');
+        if (io) {
+            const dashboardState = await dashboardService.getDashboardState(DEFAULT_SHOWFLAT_ID);
+            io.emit('QUEUE_UPDATED', dashboardState);
+        }
+
+        res.json({
+            success: true,
+            agent: result.agent,
+            message: 'Agent is back online',
+        });
+    } catch (error) {
+        console.error('Error in /agent/complete:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 module.exports = router;
+

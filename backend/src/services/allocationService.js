@@ -15,7 +15,7 @@ const activeTimers = new Map(); // walkInId -> { timer, agentId, callAttemptId }
  * Main allocation function - handles a new walk-in customer
  * Uses Prisma transaction with serializable isolation for concurrency safety
  */
-async function allocateAgent(showFlatId, io) {
+async function allocateAgent(showFlatId, customerName, io) {
     // Use transaction with serializable isolation to prevent race conditions
     return await prisma.$transaction(async (tx) => {
         // Fetch ShowFlat with current state
@@ -36,10 +36,11 @@ async function allocateAgent(showFlatId, io) {
             throw new Error('Invalid rotation order configuration');
         }
 
-        // Create the walk-in record
+        // Create the walk-in record with customer name
         const walkIn = await tx.walkIn.create({
             data: {
                 showFlatId: showFlatId,
+                customerName: customerName || 'Guest',
                 status: 'PENDING',
             },
         });

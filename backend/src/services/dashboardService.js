@@ -84,6 +84,8 @@ async function getDashboardState(showFlatId) {
         const latestAttempt = activeCall.callAttempts[0];
         activeCallInfo = {
             walkInId: activeCall.id,
+            customerName: activeCall.customerName,
+            queueNumber: activeCall.queueNumber,
             agentId: latestAttempt.agent.id,
             agentName: latestAttempt.agent.name,
             agencyCode: latestAttempt.agency.code,
@@ -99,6 +101,8 @@ async function getDashboardState(showFlatId) {
     if (lastAssigned && lastAssigned.assignedAgent) {
         lastAssignment = {
             walkInId: lastAssigned.id,
+            customerName: lastAssigned.customerName,
+            queueNumber: lastAssigned.queueNumber,
             agentId: lastAssigned.assignedAgent.id,
             agentName: lastAssigned.assignedAgent.name,
             agencyCode: lastAssigned.assignedAgent.agency.code,
@@ -123,6 +127,8 @@ async function getDashboardState(showFlatId) {
         recentWalkIns: recentWalkIns.map(w => ({
             id: w.id,
             status: w.status,
+            customerName: w.customerName,
+            queueNumber: w.queueNumber,
             createdAt: w.createdAt,
             assignedAgentName: w.assignedAgent?.name || null,
             assignedAgencyCode: w.assignedAgent?.agency?.code || null,
@@ -132,6 +138,7 @@ async function getDashboardState(showFlatId) {
 
 /**
  * Get public display data (for TV screen)
+ * Shows BOTH currently being called AND last assigned
  */
 async function getPublicDisplayData(showFlatId) {
     const showFlat = await prisma.showFlat.findUnique({
@@ -140,6 +147,40 @@ async function getPublicDisplayData(showFlatId) {
 
     if (!showFlat) {
         throw new Error('ShowFlat not found');
+    }
+
+    // First check if there's an active call (CALLED status) - customer waiting for agent response
+    const activeCalling = await prisma.walkIn.findFirst({
+        where: {
+            showFlatId: showFlatId,
+            status: 'CALLED',
+        },
+        include: {
+            callAttempts: {
+                include: {
+                    agent: true,
+                    agency: true,
+                },
+                orderBy: { calledAt: 'desc' },
+                take: 1,
+            },
+        },
+        orderBy: { updatedAt: 'desc' },
+    });
+
+    if (activeCalling && activeCalling.callAttempts.length > 0) {
+        const attempt = activeCalling.callAttempts[0];
+        return {
+            showFlatName: showFlat.name,
+            status: 'CALLING', // Agent is being called
+            hasAssignment: true,
+            customerName: activeCalling.customerName,
+            queueNumber: activeCalling.queueNumber,
+            agentName: attempt.agent.name,
+            agencyCode: attempt.agency.code,
+            agencyName: attempt.agency.name,
+            calledAt: attempt.calledAt,
+        };
     }
 
     // Get last assigned walk-in
@@ -159,7 +200,10 @@ async function getPublicDisplayData(showFlatId) {
     if (lastAssigned && lastAssigned.assignedAgent) {
         return {
             showFlatName: showFlat.name,
+            status: 'ASSIGNED', // Customer is assigned to agent
             hasAssignment: true,
+            customerName: lastAssigned.customerName,
+            queueNumber: lastAssigned.queueNumber,
             agentName: lastAssigned.assignedAgent.name,
             agencyCode: lastAssigned.assignedAgent.agency.code,
             agencyName: lastAssigned.assignedAgent.agency.name,
@@ -169,7 +213,10 @@ async function getPublicDisplayData(showFlatId) {
 
     return {
         showFlatName: showFlat.name,
+        status: 'WAITING',
         hasAssignment: false,
+        customerName: null,
+        queueNumber: null,
         agentName: null,
         agencyCode: null,
         agencyName: null,

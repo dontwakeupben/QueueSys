@@ -25,6 +25,7 @@ enum WalkInStatus {
   CALLED
   ASSIGNED
   FAILED
+  NO_SHOW
 }
 
 enum FailPolicy {
@@ -112,6 +113,8 @@ model AgentQueue {
 /// WalkIn - Customer walk-in records
 model WalkIn {
   id              String        @id @default(uuid())
+  queueNumber     Int           @default(autoincrement()) @map("queue_number") // Auto-incrementing queue number
+  customerName    String        @map("customer_name") // Customer's name for identification
   status          WalkInStatus  @default(PENDING)
   showFlatId      String        @map("show_flat_id")
   assignedAgentId String?       @map("assigned_agent_id")
