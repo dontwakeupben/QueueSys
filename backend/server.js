@@ -20,10 +20,19 @@ const { setupSocketHandlers } = require('./src/socket/handlers');
 const app = express();
 const server = http.createServer(app);
 
+// Get allowed origins from environment or use defaults
+const allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:5173',
+    'https://queue-sys-three.vercel.app',
+    process.env.FRONTEND_URL, // Allow custom frontend URL from env
+].filter(Boolean);
+
 // Initialize Socket.io
 const io = new Server(server, {
     cors: {
-        origin: ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173'],
+        origin: allowedOrigins,
         methods: ['GET', 'POST'],
         credentials: true,
     },
@@ -34,7 +43,7 @@ app.set('io', io);
 
 // Middleware
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173'],
+    origin: allowedOrigins,
     credentials: true,
 }));
 app.use(express.json());
