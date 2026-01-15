@@ -5,7 +5,7 @@ import API_URL from '../api';
 /**
  * Dashboard View - Front Desk Interface
  * Features:
- * - New Walk-In button
+ * - New Walk-In button with customer name input
  * - Agency columns with queued agents
  * - Active agency highlighting
  * - Live call status
@@ -15,6 +15,8 @@ export default function DashboardView() {
     const [isLoading, setIsLoading] = useState(true);
     const [isCreating, setIsCreating] = useState(false);
     const [callStatus, setCallStatus] = useState(null);
+    const [customerName, setCustomerName] = useState('');
+    const [showNameInput, setShowNameInput] = useState(false);
 
     // Fetch dashboard data
     const fetchDashboard = async () => {
@@ -68,6 +70,11 @@ export default function DashboardView() {
 
     // Create new walk-in
     const handleNewWalkIn = async () => {
+        if (!customerName.trim()) {
+            setShowNameInput(true);
+            return;
+        }
+
         setIsCreating(true);
         setCallStatus(null);
 
@@ -75,16 +82,18 @@ export default function DashboardView() {
             const res = await fetch(`${API_URL}/api/walkin/new`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({}),
+                body: JSON.stringify({ customerName: customerName.trim() }),
             });
             const data = await res.json();
 
             if (data.success) {
                 setCallStatus({
                     type: 'calling',
-                    message: `Calling ${data.agent.name} from Agency ${data.agency.code}...`,
+                    message: `Calling ${data.agent.name} for ${customerName} (Queue #${data.walkIn.queueNumber})...`,
                     walkInId: data.walkIn.id,
                 });
+                setCustomerName('');
+                setShowNameInput(false);
             } else {
                 setCallStatus({
                     type: 'error',
@@ -116,7 +125,7 @@ export default function DashboardView() {
         <div className="max-w-7xl mx-auto">
             {/* Header with New Walk-In Button */}
             <div className="glass-card p-6 mb-6">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-4">
                     <div>
                         <h2 className="text-2xl font-bold text-white">{dashboard?.showFlat?.name || 'Show Flat'}</h2>
                         <p className="text-slate-400">
@@ -125,20 +134,43 @@ export default function DashboardView() {
                         </p>
                     </div>
 
-                    <button
-                        onClick={handleNewWalkIn}
-                        disabled={isCreating || callStatus?.type === 'calling'}
-                        className="btn-glow px-8 py-4 bg-gradient-to-r from-primary-500 to-accent-500 rounded-xl font-bold text-xl text-white shadow-lg shadow-primary-500/30 hover:shadow-primary-500/50 transition-all transform hover:scale-105 disabled:opacity-50 disabled:transform-none"
-                    >
-                        {isCreating ? (
-                            <span className="flex items-center gap-2">
-                                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                Creating...
-                            </span>
-                        ) : (
-                            '+ NEW WALK-IN'
+                    <div className="flex items-center gap-3">
+                        {showNameInput && (
+                            <input
+                                type="text"
+                                value={customerName}
+                                onChange={(e) => setCustomerName(e.target.value)}
+                                placeholder="Customer name..."
+                                className="px-4 py-3 rounded-xl bg-slate-800 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-primary-500"
+                                onKeyPress={(e) => e.key === 'Enter' && handleNewWalkIn()}
+                                autoFocus
+                            />
                         )}
-                    </button>
+                        <button
+                            onClick={() => showNameInput ? handleNewWalkIn() : setShowNameInput(true)}
+                            disabled={isCreating || callStatus?.type === 'calling'}
+                            className="btn-glow px-8 py-4 bg-gradient-to-r from-primary-500 to-accent-500 rounded-xl font-bold text-xl text-white shadow-lg shadow-primary-500/30 hover:shadow-primary-500/50 transition-all transform hover:scale-105 disabled:opacity-50 disabled:transform-none"
+                        >
+                            {isCreating ? (
+                                <span className="flex items-center gap-2">
+                                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                    Creating...
+                                </span>
+                            ) : showNameInput ? (
+                                'SUBMIT'
+                            ) : (
+                                '+ NEW WALK-IN'
+                            )}
+                        </button>
+                        {showNameInput && (
+                            <button
+                                onClick={() => { setShowNameInput(false); setCustomerName(''); }}
+                                className="px-4 py-4 rounded-xl bg-slate-700 text-slate-300 hover:bg-slate-600"
+                            >
+                                Cancel
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {/* Call Status Banner */}

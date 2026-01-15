@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import socket from '../socket';
 import API_URL from '../api';
 
@@ -8,6 +8,7 @@ import API_URL from '../api';
  * - Online/Offline toggle
  * - Full-screen call modal with countdown
  * - Accept button
+ * - No-show and complete buttons after accepting
  */
 export default function AgentView() {
     const [agents, setAgents] = useState([]);
@@ -17,6 +18,7 @@ export default function AgentView() {
     const [incomingCall, setIncomingCall] = useState(null);
     const [countdown, setCountdown] = useState(0);
     const [isAccepting, setIsAccepting] = useState(false);
+    const [currentWalkIn, setCurrentWalkIn] = useState(null); // Track assigned walk-in
 
     // Fetch agents list
     useEffect(() => {
@@ -107,6 +109,7 @@ export default function AgentView() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ agentId: selectedAgent.id }),
                 });
+                setIsOnline(false);
             } else {
                 // Go online
                 socket.emit('AGENT_JOIN', { agentId: selectedAgent.id });
@@ -115,6 +118,7 @@ export default function AgentView() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ agentId: selectedAgent.id, socketId: socket.id }),
                 });
+                setIsOnline(true);
             }
         } catch (err) {
             console.error('Failed to toggle status:', err);
@@ -127,7 +131,7 @@ export default function AgentView() {
 
         setIsAccepting(true);
         try {
-            await fetch(`${API_URL}/api/agent/accept`, {
+            const res = await fetch(`${API_URL}/api/agent/accept`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -135,13 +139,62 @@ export default function AgentView() {
                     agentId: selectedAgent.id,
                 }),
             });
+            const data = await res.json();
+
+            // Store the walk-in info for no-show/complete buttons
+            setCurrentWalkIn({
+                id: incomingCall.walkInId,
+                customerName: incomingCall.customerName,
+                queueNumber: incomingCall.queueNumber,
+            });
+
             setIncomingCall(null);
             setCountdown(0);
-            setIsOnline(false);
+            setIsOnline(false); // Agent is now busy
         } catch (err) {
             console.error('Failed to accept:', err);
         } finally {
             setIsAccepting(false);
+        }
+    };
+
+    // Mark as no-show
+    const handleNoShow = async () => {
+        if (!currentWalkIn || !selectedAgent) return;
+
+        try {
+            await fetch(`${API_URL}/api/walkin/no-show`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    walkInId: currentWalkIn.id,
+                    agentId: selectedAgent.id,
+                }),
+            });
+            setCurrentWalkIn(null);
+            setIsOnline(true); // Agent goes back online
+        } catch (err) {
+            console.error('Failed to mark no-show:', err);
+        }
+    };
+
+    // Complete serving customer
+    const handleComplete = async () => {
+        if (!selectedAgent) return;
+
+        try {
+            await fetch(`${API_URL}/api/agent/complete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    agentId: selectedAgent.id,
+                    socketId: socket.id,
+                }),
+            });
+            setCurrentWalkIn(null);
+            setIsOnline(true); // Agent goes back online
+        } catch (err) {
+            console.error('Failed to complete:', err);
         }
     };
 
@@ -224,6 +277,14 @@ export default function AgentView() {
                             </div>
                         </div>
 
+                        {/* Customer Info */}
+                        {incomingCall.customerName && (
+                            <div className="mb-6">
+                                <p className="text-2xl text-slate-400">Queue #{incomingCall.queueNumber}</p>
+                                <p className="text-4xl font-bold text-white">{incomingCall.customerName}</p>
+                            </div>
+                        )}
+
                         <h2 className="text-4xl font-bold text-white mb-4 animate-pulse">
                             INCOMING CUSTOMER
                         </h2>
@@ -256,28 +317,59 @@ export default function AgentView() {
                         </p>
                     </div>
 
+                    {/* Current Customer Info (if serving) */}
+                    {currentWalkIn && (
+                        <div className="mb-6 p-4 rounded-xl bg-yellow-500/20 border border-yellow-500/30">
+                            <p className="text-sm text-yellow-400 mb-1">Currently Serving</p>
+                            <p className="text-xl font-bold text-white">
+                                #{currentWalkIn.queueNumber} - {currentWalkIn.customerName}
+                            </p>
+                        </div>
+                    )}
+
                     {/* Status Badge */}
                     <div className="flex justify-center mb-8">
-                        <div className={`px-6 py-3 rounded-full font-semibold text-lg ${isOnline ? 'status-online text-white' : 'status-offline text-slate-300'
+                        <div className={`px-6 py-3 rounded-full font-semibold text-lg ${currentWalkIn
+                                ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500'
+                                : isOnline
+                                    ? 'status-online text-white'
+                                    : 'status-offline text-slate-300'
                             }`}>
-                            {isOnline ? '🟢 ONLINE' : '⚫ OFFLINE'}
+                            {currentWalkIn ? '🟡 BUSY - SERVING' : isOnline ? '🟢 ONLINE' : '⚫ OFFLINE'}
                         </div>
                     </div>
 
-                    {/* Toggle Button */}
-                    <button
-                        onClick={handleToggleOnline}
-                        className={`w-full py-5 rounded-xl font-bold text-xl transition-all transform hover:scale-[1.02] ${isOnline
-                            ? 'bg-gradient-to-r from-red-500 to-rose-600 text-white shadow-lg shadow-red-500/30'
-                            : 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg shadow-green-500/30'
-                            }`}
-                    >
-                        {isOnline ? 'GO OFFLINE' : 'GO ONLINE'}
-                    </button>
+                    {/* Action Buttons */}
+                    {currentWalkIn ? (
+                        <div className="space-y-3">
+                            <button
+                                onClick={handleComplete}
+                                className="w-full py-5 rounded-xl font-bold text-xl bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg shadow-green-500/30 transition-all transform hover:scale-[1.02]"
+                            >
+                                ✓ COMPLETE - GO BACK ONLINE
+                            </button>
+                            <button
+                                onClick={handleNoShow}
+                                className="w-full py-4 rounded-xl font-bold text-lg bg-gradient-to-r from-red-500 to-rose-600 text-white shadow-lg shadow-red-500/30 transition-all transform hover:scale-[1.02]"
+                            >
+                                ✕ NO SHOW - CUSTOMER DIDN'T ARRIVE
+                            </button>
+                        </div>
+                    ) : (
+                        <button
+                            onClick={handleToggleOnline}
+                            className={`w-full py-5 rounded-xl font-bold text-xl transition-all transform hover:scale-[1.02] ${isOnline
+                                ? 'bg-gradient-to-r from-red-500 to-rose-600 text-white shadow-lg shadow-red-500/30'
+                                : 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg shadow-green-500/30'
+                                }`}
+                        >
+                            {isOnline ? 'GO OFFLINE' : 'GO ONLINE'}
+                        </button>
+                    )}
 
                     {/* Change Agent */}
                     <button
-                        onClick={() => setSelectedAgent(null)}
+                        onClick={() => { setSelectedAgent(null); setCurrentWalkIn(null); }}
                         className="w-full mt-4 py-3 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700/50 transition-all"
                     >
                         Switch Agent
