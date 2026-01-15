@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import socket from '../socket';
+import API_URL from '../api';
 
 /**
  * Public Display - TV-friendly screen
@@ -11,7 +12,7 @@ export default function PublicDisplay() {
 
     const fetchDisplayData = async () => {
         try {
-            const res = await fetch('/api/public-display');
+            const res = await fetch(`${API_URL}/api/public-display`);
             const data = await res.json();
             setDisplayData(data);
             setIsLoading(false);

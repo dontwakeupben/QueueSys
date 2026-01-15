@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import socket from '../socket';
+import API_URL from '../api';
 
 /**
  * Dashboard View - Front Desk Interface
@@ -18,7 +19,7 @@ export default function DashboardView() {
     // Fetch dashboard data
     const fetchDashboard = async () => {
         try {
-            const res = await fetch('/api/dashboard');
+            const res = await fetch(`${API_URL}/api/dashboard`);
             const data = await res.json();
             setDashboard(data);
             setIsLoading(false);
@@ -71,7 +72,7 @@ export default function DashboardView() {
         setCallStatus(null);
 
         try {
-            const res = await fetch('/api/walkin/new', {
+            const res = await fetch(`${API_URL}/api/walkin/new`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({}),
@@ -143,8 +144,8 @@ export default function DashboardView() {
                 {/* Call Status Banner */}
                 {callStatus && (
                     <div className={`mt-4 p-4 rounded-xl flex items-center gap-3 ${callStatus.type === 'calling' ? 'bg-yellow-500/20 border border-yellow-500/30' :
-                            callStatus.type === 'success' ? 'bg-green-500/20 border border-green-500/30' :
-                                'bg-red-500/20 border border-red-500/30'
+                        callStatus.type === 'success' ? 'bg-green-500/20 border border-green-500/30' :
+                            'bg-red-500/20 border border-red-500/30'
                         }`}>
                         {callStatus.type === 'calling' && (
                             <div className="w-6 h-6 border-3 border-yellow-400 border-t-transparent rounded-full animate-spin"></div>
@@ -160,8 +161,8 @@ export default function DashboardView() {
                             </svg>
                         )}
                         <span className={`font-medium ${callStatus.type === 'calling' ? 'text-yellow-300' :
-                                callStatus.type === 'success' ? 'text-green-300' :
-                                    'text-red-300'
+                            callStatus.type === 'success' ? 'text-green-300' :
+                                'text-red-300'
                             }`}>
                             {callStatus.message}
                         </span>
@@ -181,8 +182,8 @@ export default function DashboardView() {
                         <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-3">
                                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl font-bold ${agency.isActive
-                                        ? 'bg-gradient-to-br from-primary-500 to-accent-500 text-white pulse-ring'
-                                        : 'bg-slate-700 text-slate-300'
+                                    ? 'bg-gradient-to-br from-primary-500 to-accent-500 text-white pulse-ring'
+                                    : 'bg-slate-700 text-slate-300'
                                     }`}>
                                     {agency.code}
                                 </div>
@@ -214,8 +215,8 @@ export default function DashboardView() {
                                     <div
                                         key={agent.id}
                                         className={`p-3 rounded-lg flex items-center gap-3 ${index === 0 && agency.isActive
-                                                ? 'bg-primary-500/20 border border-primary-500/30'
-                                                : 'bg-slate-800/50'
+                                            ? 'bg-primary-500/20 border border-primary-500/30'
+                                            : 'bg-slate-800/50'
                                             }`}
                                     >
                                         <div className="w-2 h-2 rounded-full bg-green-500"></div>

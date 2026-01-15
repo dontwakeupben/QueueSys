@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import socket from '../socket';
+import API_URL from '../api';
 
 /**
  * Agent View - Individual agent interface
@@ -19,7 +20,7 @@ export default function AgentView() {
 
     // Fetch agents list
     useEffect(() => {
-        fetch('/api/agents')
+        fetch(`${API_URL}/api/agents`)
             .then(res => res.json())
             .then(data => {
                 setAgents(data);
@@ -101,7 +102,7 @@ export default function AgentView() {
             if (isOnline) {
                 // Go offline
                 socket.emit('AGENT_LEAVE', { agentId: selectedAgent.id });
-                await fetch('/api/agent/leave', {
+                await fetch(`${API_URL}/api/agent/leave`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ agentId: selectedAgent.id }),
@@ -109,7 +110,7 @@ export default function AgentView() {
             } else {
                 // Go online
                 socket.emit('AGENT_JOIN', { agentId: selectedAgent.id });
-                await fetch('/api/agent/join', {
+                await fetch(`${API_URL}/api/agent/join`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ agentId: selectedAgent.id, socketId: socket.id }),
@@ -126,7 +127,7 @@ export default function AgentView() {
 
         setIsAccepting(true);
         try {
-            await fetch('/api/agent/accept', {
+            await fetch(`${API_URL}/api/agent/accept`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -172,8 +173,8 @@ export default function AgentView() {
                                 <div className="text-lg font-semibold text-white">{agent.name}</div>
                                 <div className="text-sm text-slate-400">Agency {agent.agency?.code}</div>
                                 <div className={`mt-2 inline-block px-3 py-1 rounded-full text-xs font-medium ${agent.status === 'AVAILABLE' ? 'bg-green-500/20 text-green-400' :
-                                        agent.status === 'UNAVAILABLE' ? 'bg-yellow-500/20 text-yellow-400' :
-                                            'bg-slate-500/20 text-slate-400'
+                                    agent.status === 'UNAVAILABLE' ? 'bg-yellow-500/20 text-yellow-400' :
+                                        'bg-slate-500/20 text-slate-400'
                                     }`}>
                                     {agent.status}
                                 </div>
@@ -267,8 +268,8 @@ export default function AgentView() {
                     <button
                         onClick={handleToggleOnline}
                         className={`w-full py-5 rounded-xl font-bold text-xl transition-all transform hover:scale-[1.02] ${isOnline
-                                ? 'bg-gradient-to-r from-red-500 to-rose-600 text-white shadow-lg shadow-red-500/30'
-                                : 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg shadow-green-500/30'
+                            ? 'bg-gradient-to-r from-red-500 to-rose-600 text-white shadow-lg shadow-red-500/30'
+                            : 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg shadow-green-500/30'
                             }`}
                     >
                         {isOnline ? 'GO OFFLINE' : 'GO ONLINE'}
