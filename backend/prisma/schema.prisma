@@ -1,0 +1,144 @@
+// Prisma Schema for Live Show Flat Queue System
+// MySQL Database with Round-Robin Agency + FIFO Agent allocation
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum AgentStatus {
+  AVAILABLE
+  UNAVAILABLE
+  OFFLINE
+}
+
+enum WalkInStatus {
+  PENDING
+  CALLED
+  ASSIGNED
+  FAILED
+}
+
+enum FailPolicy {
+  SAME_AGENCY_THEN_NEXT
+  SKIP_AGENCY
+}
+
+enum CallResult {
+  ACCEPTED
+  TIMED_OUT
+  DECLINED
+}
+
+// ============================================
+// MODELS
+// ============================================
+
+/// ShowFlat - The venue/property being shown
+model ShowFlat {
+  id              String      @id @default(uuid())
+  name            String
+  rotationOrder   Json        @map("rotation_order") // Array of agency codes, e.g. ["A", "B", "C"]
+  pointerIndex    Int         @default(0) @map("pointer_index") // Current position in rotation for round-robin
+  timeoutSeconds  Int         @default(30) @map("timeout_seconds")
+  failPolicy      FailPolicy  @default(SAME_AGENCY_THEN_NEXT) @map("fail_policy")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  agencies        Agency[]
+  walkIns         WalkIn[]
+
+  @@map("ShowFlat")
+}
+
+/// Agency - Real estate agencies
+model Agency {
+  id          String    @id @default(uuid())
+  name        String
+  code        String    @unique // Short code like "A", "B", "C"
+  showFlatId  String    @map("show_flat_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  showFlat      ShowFlat      @relation(fields: [showFlatId], references: [id], onDelete: Cascade)
+  agents        Agent[]
+  agentQueues   AgentQueue[]
+  callAttempts  CallAttempt[]
+
+  @@map("Agency")
+}
+
+/// Agent - Individual real estate agents
+model Agent {
+  id          String        @id @default(uuid())
+  name        String
+  status      AgentStatus   @default(OFFLINE)
+  agencyId    String        @map("agency_id")
+  socketId    String?       @map("socket_id") // Current socket connection ID
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  agency        Agency        @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  agentQueue    AgentQueue?
+  assignedWalkIns WalkIn[]
+  callAttempts  CallAttempt[]
+
+  @@map("Agent")
+}
+
+/// AgentQueue - FIFO queue for available agents
+/// An agent can only appear in this table once at a time (unique constraint on agent_id)
+model AgentQueue {
+  id          String    @id @default(uuid())
+  agencyId    String    @map("agency_id")
+  agentId     String    @unique @map("agent_id") // Unique constraint: agent only once in queue
+  joinedAt    DateTime  @default(now()) @map("joined_at") // Sort by this ASC for FIFO
+
+  agency      Agency    @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  agent       Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agencyId, joinedAt(sort: Asc)], name: "idx_agency_fifo")
+  @@map("AgentQueue")
+}
+
+/// WalkIn - Customer walk-in records
+model WalkIn {
+  id              String        @id @default(uuid())
+  status          WalkInStatus  @default(PENDING)
+  showFlatId      String        @map("show_flat_id")
+  assignedAgentId String?       @map("assigned_agent_id")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  showFlat        ShowFlat      @relation(fields: [showFlatId], references: [id], onDelete: Cascade)
+  assignedAgent   Agent?        @relation(fields: [assignedAgentId], references: [id], onDelete: SetNull)
+  callAttempts    CallAttempt[]
+
+  @@map("WalkIn")
+}
+
+/// CallAttempt - Audit log for each call attempt
+model CallAttempt {
+  id          String      @id @default(uuid())
+  walkInId    String      @map("walkin_id")
+  agencyId    String      @map("agency_id")
+  agentId     String      @map("agent_id")
+  calledAt    DateTime    @default(now()) @map("called_at")
+  respondedAt DateTime?   @map("responded_at")
+  result      CallResult?
+
+  walkIn      WalkIn      @relation(fields: [walkInId], references: [id], onDelete: Cascade)
+  agency      Agency      @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  agent       Agent       @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([walkInId, calledAt(sort: Desc)], name: "idx_walkin_attempts")
+  @@map("CallAttempt")
+}
